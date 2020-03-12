@@ -1,0 +1,114 @@
+'Sebastian Stobrawa, IFW University Hannover, Germany
+'Gennady Dorinskiy, IFW University Hannover, Germany
+'Projekt "DigiTwin" 2020-01-31
+'
+Option Explicit
+Dim swApp As SldWorks.SldWorks 'Application
+Dim swModel As SldWorks.ModelDoc2 'Model
+Dim tritem As SldWorks.TreeControlItem 'Tree item
+Dim out As String 'Output
+Dim trelev As Integer 'Tree level
+
+Sub main()
+
+Set swApp = Application.SldWorks
+Set swModel = swApp.ActiveDoc
+Set tritem = swModel.FeatureManager.GetFeatureTreeRootItem()
+
+MsgBox "The export was started.  This operation may take a few minutes.  Please do not exit the program." 'User Information
+
+out = "<?xml version=""1.0"" encoding=""UTF-8"" standalone=""yes""?>" 'Definition of header
+out = out & vbNewLine & "<Datenschnittstelle>" & vbNewLine 'First Line of XML
+
+If Not tritem Is Nothing Then
+    expo tritem 'Calling the recursion function
+    out = out & "</Datenschnittstelle>" 'Transfer to the output string
+    datex out 'output function
+End If
+
+End Sub
+
+Private Sub expo(tre As SldWorks.TreeControlItem)
+
+Dim Xpos As Double 'X position
+Dim Ypos As Double 'Y position
+Dim obj As Object 'current object
+Dim objtyp As Long 'current object type
+Dim found As Boolean 'variable to exclude empty entries
+Dim res As String 'output string variable
+Dim com As SldWorks.Component2 'component
+Dim comname As String 'name of the component
+Dim i As Integer 'run variable
+Dim child As SldWorks.TreeControlItem 'Child of Tree Item
+Dim SelMgr As SldWorks.SelectionMgr
+Dim PickPoint As Variant
+Dim Trans As SldWorks.MathTransform
+
+'Initialization
+Xpos = 0
+Ypos = 0
+Set obj = tre.Object
+objtyp = tre.ObjectType
+found = False
+Set SelMgr = swModel.SelectionManager
+
+Select Case objtyp
+    Case SwConst.swTreeControlItemType_e.swFeatureManagerItem_Component:
+        found = True
+        If Not obj Is Nothing Then 'exclude empty entries
+            found = obj.Select2(False, 0)
+            Set com = SelMgr.GetSelectedObject6(1, -1)
+            Set Trans = com.Transform2
+            PickPoint = Trans.ArrayData 'transformation to reference coord. system
+            If Not VarType(PickPoint) = 0 Then
+                Xpos = Round(PickPoint(9), 6)
+                Ypos = Round(PickPoint(10), 6)
+            End If
+            Set com = obj
+            comname = com.Name2
+            If (comname = "") Then
+                comname = "???"
+            End If
+            'XML
+            res = vbTab & "<Adresszeile>" _
+            & vbNewLine & vbTab & vbTab & "<SimType>" & "machine" & "</SimType>" _
+            & vbNewLine & vbTab & vbTab & "<Maschine>" & comname & "</Maschine>" _
+            & vbNewLine & vbTab & vbTab & "<Type>" & "TYP DER MASCHINE" & "</Type>" _
+            & vbNewLine & vbTab & vbTab & "<X>" & Xpos & "</X>" _
+            & vbNewLine & vbTab & vbTab & "<Y>" & Ypos & "</Y>" _
+            & vbNewLine & vbTab & "</Adresszeile>" & vbNewLine
+        End If
+    Case Else:
+End Select
+
+If (found) Then
+    out = out & res 'Transfer to the output string
+End If
+
+'Resursion
+trelev = trelev + 1
+Set child = tre.GetFirstChild()
+While Not child Is Nothing
+    expo child 'Here is the recursion to run through the component
+    Set child = child.GetNext
+Wend
+trelev = trelev - 1
+
+End Sub
+
+Sub datex(out As String)
+
+    Dim NFF As Integer
+    Dim Pfa As String 'path
+    
+    NFF = FreeFile
+    Pfa = InputBox("Enter the path to the folder where you want to save the interface file.", "Enter path") 'Definition of path
+    Pfa = Pfa & "\interface.xml" 'Definition of the name of XML-File
+    
+    'Export
+    Open Pfa For Output As #NFF
+    Print #NFF, out
+    Close #NFF
+    MsgBox "The export was executed"
+    
+End Sub
